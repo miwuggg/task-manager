@@ -1,4 +1,4 @@
-const API = "http://task-manager-00y6.onrender.com/tasks";
+const API = "https://task-manager-00y6.onrender.com/tasks";
 
 const app = Vue.createApp({
   data() {
