@@ -1,76 +1,85 @@
 const express = require("express");
 const cors = require("cors");
-const sqlite3 = require("sqlite3").verbose();
+const fs = require("fs");
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-const db = new sqlite3.Database("./database.db");
+// файл базы данных
+const DB_FILE = "./backend/data.json";
 
-// CREATE TABLE
-db.run(`
-CREATE TABLE IF NOT EXISTS tasks (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  completed INTEGER DEFAULT 0
-)
-`);
+// если файла нет — создаём
+if (!fs.existsSync(DB_FILE)) {
+  fs.writeFileSync(DB_FILE, JSON.stringify([]));
+}
 
-// GET
+// чтение задач
+function getTasks() {
+  return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+}
+
+// сохранение задач
+function saveTasks(tasks) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(tasks, null, 2));
+}
+
+// GET — все задачи
 app.get("/tasks", (req, res) => {
-  db.all("SELECT * FROM tasks", [], (err, rows) => {
-    res.json(rows);
-  });
+  res.json(getTasks());
 });
 
-// POST
+// POST — добавить задачу
 app.post("/tasks", (req, res) => {
-  const { title } = req.body;
+  const tasks = getTasks();
 
-  db.run(
-    "INSERT INTO tasks (title, completed) VALUES (?, 0)",
-    [title],
-    function (err) {
-      if (err) {
-        console.log(err);
-        return res.sendStatus(500);
-      }
-      res.sendStatus(200);
-    }
-  );
+  const newTask = {
+    id: Date.now(), // уникальный id
+    title: req.body.title,
+    completed: 0
+  };
+
+  tasks.push(newTask);
+  saveTasks(tasks);
+
+  res.json(newTask);
 });
 
-// DELETE
+// DELETE — удалить задачу
 app.delete("/tasks/:id", (req, res) => {
-  db.run("DELETE FROM tasks WHERE id = ?", [req.params.id], function (err) {
-    if (err) {
-      console.log(err);
-      return res.sendStatus(500);
-    }
-    res.sendStatus(200);
-  });
+  let tasks = getTasks();
+
+  tasks = tasks.filter(task => task.id != req.params.id);
+
+  saveTasks(tasks);
+
+  res.sendStatus(200);
 });
 
-// PUT (update + toggle)
+// PUT — обновить задачу (редактирование + галочка)
 app.put("/tasks/:id", (req, res) => {
-  const { title, completed } = req.body;
+  let tasks = getTasks();
 
-  db.run(
-    "UPDATE tasks SET title = ?, completed = ? WHERE id = ?",
-    [title, completed ? 1 : 0, req.params.id],
-    function (err) {
-      if (err) {
-        console.log(err);
-        return res.sendStatus(500);
-      }
-      res.sendStatus(200);
-    }
-  );
+  const index = tasks.findIndex(t => t.id == req.params.id);
+
+  if (index !== -1) {
+    tasks[index] = {
+      ...tasks[index],
+      title: req.body.title,
+      completed: req.body.completed
+    };
+
+    saveTasks(tasks);
+    res.json(tasks[index]);
+  } else {
+    res.sendStatus(404);
+  }
 });
 
 // START SERVER
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
