@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // файл базы данных
-const DB_FILE = "./backend/data.json";
+const DB_FILE = "./data.json";
 
 // если файла нет — создаём
 if (!fs.existsSync(DB_FILE)) {
