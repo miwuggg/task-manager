@@ -16,14 +16,16 @@ const app = Vue.createApp({
           placeholder: "Нове завдання...",
           all: "Всі",
           active: "Активні",
-          done: "Виконані"
+          done: "Виконані",
+          add: "Додати"
         },
         en: {
           title: "📝 Task Manager",
           placeholder: "New task...",
           all: "All",
           active: "Active",
-          done: "Done"
+          done: "Done",
+          add: "Add"
         }
       }
     };
@@ -38,14 +40,19 @@ const app = Vue.createApp({
       if (this.filter === "all") return this.tasks;
       if (this.filter === "active") return this.tasks.filter(t => t.completed === 0);
       if (this.filter === "done") return this.tasks.filter(t => t.completed === 1);
+      return this.tasks;
     }
   },
 
   methods: {
 
     async loadTasks() {
-      const res = await fetch(API);
-      this.tasks = await res.json();
+      try {
+        const res = await fetch(API);
+        this.tasks = await res.json();
+      } catch (err) {
+        console.log("API error:", err);
+      }
     },
 
     async addTask() {
@@ -62,7 +69,10 @@ const app = Vue.createApp({
     },
 
     async deleteTask(id) {
-      await fetch(`${API}/${id}`, { method: "DELETE" });
+      await fetch(`${API}/${id}`, {
+        method: "DELETE"
+      });
+
       this.loadTasks();
     },
 
@@ -96,6 +106,10 @@ const app = Vue.createApp({
 
       this.editingTask = null;
       this.loadTasks();
+    },
+
+    changeLang(lang) {
+      this.lang = lang;
     }
   },
 

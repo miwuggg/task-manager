@@ -51,8 +51,8 @@
 
   <!-- LANGUAGE -->
   <div class="lang-btn">
-    <button class="btn btn-sm btn-primary me-1" @click="lang='ua'">UA</button>
-    <button class="btn btn-sm btn-dark" @click="lang='en'">EN</button>
+    <button class="btn btn-sm btn-primary me-1" @click="changeLang('ua')">UA</button>
+    <button class="btn btn-sm btn-dark" @click="changeLang('en')">EN</button>
   </div>
 
   <!-- TITLE -->
@@ -76,6 +76,10 @@
   </div>
 
   <!-- TASKS -->
+  <div v-if="filteredTasks.length === 0" class="text-center text-muted">
+    No tasks
+  </div>
+
   <div v-for="task in filteredTasks" :key="task.id" class="card task-card p-3 mb-3">
 
     <div v-if="editingTask && editingTask.id === task.id">
@@ -105,10 +109,3 @@
 
     </div>
   </div>
-
-</div>
-
-<script src="app.js"></script>
-
-</body>
-</html>
