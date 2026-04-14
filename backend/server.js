@@ -3,29 +3,35 @@ const cors = require("cors");
 const fs = require("fs");
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
 const DB_FILE = "./data.json";
 
+// если файла нет — создаём
 if (!fs.existsSync(DB_FILE)) {
   fs.writeFileSync(DB_FILE, "[]");
 }
 
+// чтение задач
 function getTasks() {
   return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
 }
 
+// сохранение задач
 function saveTasks(tasks) {
   fs.writeFileSync(DB_FILE, JSON.stringify(tasks, null, 2));
 }
 
-// GET
+// ================= ROUTES =================
+
+// GET — все задачи
 app.get("/tasks", (req, res) => {
   res.json(getTasks());
 });
 
-// POST
+// POST — добавить задачу
 app.post("/tasks", (req, res) => {
   const tasks = getTasks();
 
@@ -41,17 +47,21 @@ app.post("/tasks", (req, res) => {
   res.json(newTask);
 });
 
-// DELETE
+// DELETE — удалить задачу
 app.delete("/tasks/:id", (req, res) => {
   let tasks = getTasks();
+
   tasks = tasks.filter(t => t.id != req.params.id);
+
   saveTasks(tasks);
+
   res.sendStatus(200);
 });
 
-// PUT
+// PUT — обновить задачу
 app.put("/tasks/:id", (req, res) => {
   const tasks = getTasks();
+
   const task = tasks.find(t => t.id == req.params.id);
 
   if (!task) return res.sendStatus(404);
@@ -64,5 +74,10 @@ app.put("/tasks/:id", (req, res) => {
   res.json(task);
 });
 
+// ================= START SERVER =================
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running"));
+
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
+});

@@ -1,4 +1,4 @@
-const API = "https://task-manager-00y6.onrender.com";
+const API = "https://task-manager-00y6.onrender.com/tasks";
 
 const app = Vue.createApp({
   data() {
@@ -10,10 +10,6 @@ const app = Vue.createApp({
       filter: "all",
       lang: "ua",
 
-      username: "",
-      password: "",
-      token: localStorage.getItem("token") || "",
-
       texts: {
         ua: {
           title: "📝 Менеджер завдань",
@@ -21,9 +17,7 @@ const app = Vue.createApp({
           all: "Всі",
           active: "Активні",
           done: "Виконані",
-          add: "Додати",
-          login: "Увійти",
-          register: "Реєстрація"
+          add: "Додати"
         },
         en: {
           title: "📝 Task Manager",
@@ -31,9 +25,7 @@ const app = Vue.createApp({
           all: "All",
           active: "Active",
           done: "Done",
-          add: "Add",
-          login: "Login",
-          register: "Register"
+          add: "Add"
         }
       }
     };
@@ -54,33 +46,29 @@ const app = Vue.createApp({
 
   methods: {
 
-    getHeaders() {
-      return {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.token}`
-      };
+    // 🔥 FIX: язык
+    changeLang(lang) {
+      this.lang = lang;
     },
 
+    // 🔥 FIX: безопасная загрузка
     async loadTasks() {
-      if (!this.token) return;
-
       try {
-        const res = await fetch(`${API}/tasks`, {
-          headers: this.getHeaders()
-        });
-
-        this.tasks = await res.json();
+        const res = await fetch(API);
+        const data = await res.json();
+        this.tasks = Array.isArray(data) ? data : [];
       } catch (err) {
-        console.log("Load error:", err);
+        console.log("API error:", err);
+        this.tasks = [];
       }
     },
 
     async addTask() {
-      if (!this.token || !this.newTask.trim()) return;
+      if (!this.newTask.trim()) return;
 
-      await fetch(`${API}/tasks`, {
+      await fetch(API, {
         method: "POST",
-        headers: this.getHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: this.newTask })
       });
 
@@ -89,18 +77,17 @@ const app = Vue.createApp({
     },
 
     async deleteTask(id) {
-      await fetch(`${API}/tasks/${id}`, {
-        method: "DELETE",
-        headers: this.getHeaders()
+      await fetch(`${API}/${id}`, {
+        method: "DELETE"
       });
 
       this.loadTasks();
     },
 
     async toggleTask(task) {
-      await fetch(`${API}/tasks/${task.id}`, {
+      await fetch(`${API}/${task.id}`, {
         method: "PUT",
-        headers: this.getHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: task.title,
           completed: task.completed === 1 ? 0 : 1
@@ -116,9 +103,9 @@ const app = Vue.createApp({
     },
 
     async saveEdit(task) {
-      await fetch(`${API}/tasks/${task.id}`, {
+      await fetch(`${API}/${task.id}`, {
         method: "PUT",
-        headers: this.getHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: this.editText,
           completed: task.completed
@@ -127,59 +114,11 @@ const app = Vue.createApp({
 
       this.editingTask = null;
       this.loadTasks();
-    },
-
-    async login() {
-      const res = await fetch(`${API}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: this.username,
-          password: this.password
-        })
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        this.token = data.token;
-        localStorage.setItem("token", this.token);
-        this.loadTasks();
-      } else {
-        alert(data.error);
-      }
-    },
-
-    async register() {
-      const res = await fetch(`${API}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: this.username,
-          password: this.password
-        })
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        alert("Registered! Now login.");
-      } else {
-        alert(data.error);
-      }
-    },
-
-    logout() {
-      this.token = "";
-      localStorage.removeItem("token");
-      this.tasks = [];
     }
   },
 
   mounted() {
-    if (this.token) {
-      this.loadTasks();
-    }
+    this.loadTasks();
   }
 });
 
