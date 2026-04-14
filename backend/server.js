@@ -9,51 +9,108 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// файл базы данных
 const DB_FILE = "./data.json";
-const USERS_FILE = "./users.json";  // файл для пользователей
+const USERS_FILE = "./users.json";
 
-const SECRET_KEY = "your_secret_key"; // для подписания JWT
+const SECRET_KEY = "your_secret_key";
 
-// если файлов нет — создаём их
-if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(DB_FILE, JSON.stringify([]));
-}
-if (!fs.existsSync(USERS_FILE)) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify([]));
-}
+// INIT FILES
+if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, "[]");
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, "[]");
 
-// чтение задач
+// HELPERS
 function getTasks() {
   return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
 }
 
-// сохранение задач
 function saveTasks(tasks) {
   fs.writeFileSync(DB_FILE, JSON.stringify(tasks, null, 2));
 }
 
-// чтение пользователей
 function getUsers() {
   return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
 }
 
-// сохранение пользователей
 function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-// GET — все задачи
-app.get("/tasks", (req, res) => {
-  const tasks = getTasks();
-  res.json(tasks);
+// ================= AUTH =================
+
+// REGISTER
+app.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+  const users = getUsers();
+
+  if (users.find(u => u.username === username)) {
+    return res.status(400).json({ error: "User exists" });
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+
+  users.push({
+    id: Date.now(),
+    username,
+    password: hash
+  });
+
+  saveUsers(users);
+
+  res.json({ message: "Registered" });
 });
 
-// POST — добавить задачу
-app.post("/tasks", (req, res) => {
+// LOGIN
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const users = getUsers();
+
+  const user = users.find(u => u.username === username);
+  if (!user) return res.status(400).json({ error: "Invalid credentials" });
+
+  const ok = await bcrypt.compare(password, user.password);
+  if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+
+  const token = jwt.sign(
+    { userId: user.id },
+    SECRET_KEY,
+    { expiresIn: "1h" }
+  );
+
+  res.json({ token });
+});
+
+// ================= AUTH MIDDLEWARE =================
+
+function auth(req, res, next) {
+  const header = req.headers.authorization;
+
+  if (!header) return res.sendStatus(401);
+
+  try {
+    const token = header.split(" ")[1];
+    const decoded = jwt.verify(token, SECRET_KEY);
+    req.user = decoded;
+    next();
+  } catch {
+    res.sendStatus(403);
+  }
+}
+
+// ================= TASKS (PRIVATE) =================
+
+// GET TASKS (only user)
+app.get("/tasks", auth, (req, res) => {
   const tasks = getTasks();
+  res.json(tasks.filter(t => t.userId === req.user.userId));
+});
+
+// POST TASK
+app.post("/tasks", auth, (req, res) => {
+  const tasks = getTasks();
+
   const newTask = {
-    id: Date.now(), // уникальный id
+    id: Date.now(),
+    userId: req.user.userId,
     title: req.body.title,
     completed: 0
   };
@@ -64,103 +121,40 @@ app.post("/tasks", (req, res) => {
   res.json(newTask);
 });
 
-// DELETE — удалить задачу
-app.delete("/tasks/:id", (req, res) => {
+// DELETE TASK
+app.delete("/tasks/:id", auth, (req, res) => {
   let tasks = getTasks();
-  tasks = tasks.filter(task => task.id != req.params.id);
+
+  tasks = tasks.filter(
+    t => !(t.id == req.params.id && t.userId === req.user.userId)
+  );
+
   saveTasks(tasks);
+
   res.sendStatus(200);
 });
 
-// PUT — обновить задачу (редактирование + галочка)
-app.put("/tasks/:id", (req, res) => {
-  let tasks = getTasks();
-  const index = tasks.findIndex(t => t.id == req.params.id);
+// UPDATE TASK
+app.put("/tasks/:id", auth, (req, res) => {
+  const tasks = getTasks();
 
-  if (index !== -1) {
-    tasks[index] = {
-      ...tasks[index],
-      title: req.body.title,
-      completed: req.body.completed
-    };
+  const task = tasks.find(
+    t => t.id == req.params.id && t.userId === req.user.userId
+  );
 
-    saveTasks(tasks);
-    res.json(tasks[index]);
-  } else {
-    res.sendStatus(404);
-  }
+  if (!task) return res.sendStatus(404);
+
+  task.title = req.body.title;
+  task.completed = req.body.completed;
+
+  saveTasks(tasks);
+
+  res.json(task);
 });
 
-// POST — регистрация нового пользователя
-app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-  const users = getUsers();
-
-  // Проверка на существующего пользователя
-  if (users.find(user => user.username === username)) {
-    return res.status(400).json({ error: "Username already exists" });
-  }
-
-  // Хэширование пароля
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const newUser = {
-    id: Date.now(),
-    username: username,
-    password: hashedPassword
-  };
-
-  users.push(newUser);
-  saveUsers(users);
-
-  res.status(201).json({ message: "User registered successfully" });
-});
-
-// POST — вход пользователя (логин)
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const users = getUsers();
-
-  const user = users.find(u => u.username === username);
-
-  if (!user) {
-    return res.status(400).json({ error: "Invalid credentials" });
-  }
-
-  // Сравнение пароля
-  const isMatch = await bcrypt.compare(password, user.password);
-
-  if (!isMatch) {
-    return res.status(400).json({ error: "Invalid credentials" });
-  }
-
-  // Генерация JWT
-  const token = jwt.sign({ userId: user.id }, SECRET_KEY, { expiresIn: "1h" });
-  res.json({ token });
-});
-
-// МIDDLEWARE для проверки авторизации (проверка токена)
-function authenticateToken(req, res, next) {
-  const token = req.headers["authorization"];
-  if (!token) {
-    return res.status(403).json({ error: "Token is required" });
-  }
-
-  jwt.verify(token, SECRET_KEY, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: "Invalid token" });
-    }
-
-    req.user = user;
-    next();
-  });
-}
-
-// Используем middleware для защиты маршрутов с задачами
-app.use("/tasks", authenticateToken);
-
-// Запуск сервера
+// START
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
